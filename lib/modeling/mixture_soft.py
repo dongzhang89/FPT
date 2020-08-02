@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 BatchNorm2d = nn.BatchNorm2d
+
 __all__ = ['SELFTrans', 'MixtureOfSoftMax']
 class SELFTrans(nn.Module):
     def __init__(self, n_head, n_mix, d_model, d_k, d_v, norm_layer=BatchNorm2d, 

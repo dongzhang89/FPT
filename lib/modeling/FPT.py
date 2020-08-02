@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 # from torch.nn import DataParallel  # or your customized DataParallel module
 # from sync_batchnorm import SynchronizedBatchNorm1d, patch_replication_callback
+
 from modeling.self_trans import SelfTrans
 from modeling.rendering_trans import RenderTrans
 from modeling.grounding_trans import GroundTrans

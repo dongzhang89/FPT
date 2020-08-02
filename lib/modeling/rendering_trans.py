@@ -29,7 +29,6 @@ class RenderTrans(nn.Module):
         x_low_gp = self.bn_low(x_low_gp)
         x_low_gp = self.relu(x_low_gp)
 
-        # x_high_mask = torch.cat([x_high, x_mask], dim=1)
         x_high_mask = self.conv3x3(x_high)
         x_high_mask = self.bn_high(x_high_mask)
 
@@ -37,7 +36,9 @@ class RenderTrans(nn.Module):
         if self.upsample:
             out = self.relu(
                 self.bn_upsample(self.conv_upsample(x_high)) + x_att)
+                # self.conv_cat(torch.cat([self.bn_upsample(self.conv_upsample(x_high)), x_att], dim=1))
         else:
             out = self.relu(
                 self.bn_reduction(self.conv_reduction(x_high)) + x_att)
+                # # self.conv_cat(torch.cat([self.bn_reduction(self.conv_reduction(x_high)), x_att], dim=1))
         return out

@@ -68,13 +68,13 @@ class FPT(nn.Module):
         fpn_p3_1 = self.fpn_p3_1x1(res3)
         fpn_p2_1 = self.fpn_p2_1x1(res2)
 
-        fpt_p5_out = torch.cat(self.st(fpn_p5_1, self.rt(fpn_p5_1, fpn_p4_1), 
+        fpt_p5_out = torch.cat((self.st(fpn_p5_1), self.rt(fpn_p5_1, fpn_p4_1), 
             self.rt(fpn_p5_1,fpn_p3_1), self.rt(fpn_p5_1,fpn_p2_1), fpn_p5_1), 1)
         fpt_p4_out = torch.cat((self.st(fpn_p4_1), self.rt(fpn_p4_1,fpn_p3_1), 
             self.rt(fpn_p4_1,fpn_p2_1), self.gt(fpn_p4_1,fpn_p5_1), fpn_p4_1), 1)
-        fpt_p3_out = torch.cat((self.st(fpn_p3_1), self.rt(fpn_p3_1,fpn_p2_1), 
+        fpt_p3_out = torch.cat((self.st(fpn_p3_1), self.rt(fpn_p3_1, fpn_p2_1), 
             self.gt(fpn_p3_1,fpn_p4_1), self.gt(fpn_p3_1,fpn_p5_1), fpn_p3_1), 1)
-        fpt_p2_out = torch.cat((self.st(fpn_p2_1), self.gt(fpn_p2_1,fpn_p3_1), 
+        fpt_p2_out = torch.cat((self.st(fpn_p2_1), self.gt(fpn_p2_1, fpn_p3_1), 
             self.gt(fpn_p2_1,fpn_p4_1), self.gt(fpn_p2_1,fpn_p5_1), fpn_p2_1), 1)
 
         fpt_p5 = self.fpt_p5(fpt_p5_out)

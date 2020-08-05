@@ -28,9 +28,22 @@ class FPT(nn.Module):
             def group_norm(num_channels):
                 return nn.GroupNorm(32, num_channels)
             norm = group_norm
-        self.st = SelfTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
-        self.gt = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
-        self.rt = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)
+        self.st_p5 = SelfTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.st_p4 = SelfTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.st_p3 = SelfTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.st_p2 = SelfTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.gt_p4_p5 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.gt_p3_p4 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.gt_p3_p5 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.gt_p2_p3 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.gt_p2_p4 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.gt_p2_p5 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.rt_p5_p4 = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)
+        self.rt_p5_p3 = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)
+        self.rt_p5_p2 = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)
+        self.rt_p4_p3 = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)
+        self.rt_p4_p2 = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)
+        self.rt_p3_p2 = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)
         drop_block = DropBlock2D(block_size=3, drop_prob=0.2)
         if with_norm != 'none':
             self.fpn_p5_1x1 = nn.Sequential(*[nn.Conv2d(2048, feature_dim, 1, bias=False), norm(feature_dim)])
@@ -67,16 +80,14 @@ class FPT(nn.Module):
         fpn_p4_1 = self.fpn_p4_1x1(res4)
         fpn_p3_1 = self.fpn_p3_1x1(res3)
         fpn_p2_1 = self.fpn_p2_1x1(res2)
-
-        fpt_p5_out = torch.cat((self.st(fpn_p5_1), self.rt(fpn_p5_1, fpn_p4_1), 
-            self.rt(fpn_p5_1,fpn_p3_1), self.rt(fpn_p5_1,fpn_p2_1), fpn_p5_1), 1)
-        fpt_p4_out = torch.cat((self.st(fpn_p4_1), self.rt(fpn_p4_1,fpn_p3_1), 
-            self.rt(fpn_p4_1,fpn_p2_1), self.gt(fpn_p4_1,fpn_p5_1), fpn_p4_1), 1)
-        fpt_p3_out = torch.cat((self.st(fpn_p3_1), self.rt(fpn_p3_1, fpn_p2_1), 
-            self.gt(fpn_p3_1,fpn_p4_1), self.gt(fpn_p3_1,fpn_p5_1), fpn_p3_1), 1)
-        fpt_p2_out = torch.cat((self.st(fpn_p2_1), self.gt(fpn_p2_1, fpn_p3_1), 
-            self.gt(fpn_p2_1,fpn_p4_1), self.gt(fpn_p2_1,fpn_p5_1), fpn_p2_1), 1)
-
+        fpt_p5_out = torch.cat((self.st_p5(fpn_p5_1), self.rt_p5_p4(fpn_p5_1, fpn_p4_1), 
+            self.rt_p5_p3(fpn_p5_1,fpn_p3_1), self.rt_p5_p2(fpn_p5_1,fpn_p2_1), fpn_p5_1), 1)
+        fpt_p4_out = torch.cat((self.st_p4(fpn_p4_1), self.rt_p4_p3(fpn_p4_1, fpn_p3_1), 
+            self.rt_p4_p2(fpn_p4_1,fpn_p2_1), self.gt_p4_p5(fpn_p4_1,fpn_p5_1), fpn_p4_1), 1)
+        fpt_p3_out = torch.cat((self.st_p3(fpn_p3_1), self.rt_p3_p2(fpn_p3_1, fpn_p2_1), 
+            self.gt_p3_p4(fpn_p3_1,fpn_p4_1), self.gt_p3_p5(fpn_p3_1,fpn_p5_1), fpn_p3_1), 1)
+        fpt_p2_out = torch.cat((self.st_p2(fpn_p2_1), self.gt_p2_p3(fpn_p2_1, fpn_p3_1), 
+            self.gt_p2_p4(fpn_p2_1,fpn_p4_1), self.gt_p2_p5(fpn_p2_1,fpn_p5_1), fpn_p2_1), 1)
         fpt_p5 = self.fpt_p5(fpt_p5_out)
         fpt_p4 = self.fpt_p4(fpt_p4_out)
         fpt_p3 = self.fpt_p3(fpt_p3_out)

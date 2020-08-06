@@ -99,7 +99,7 @@ class GroundTrans(nn.Module):
         y = torch.matmul(f_div_C, g_x)
         
         y = y.permute(0, 2, 1).contiguous()
-        y = y.view(batch_size, self.inter_channels, *x_low.size()[2:])
+        y = y.view(batch_size, self.inter_channels, x_low.size()[2:])
     
         z = self.W_z(y)
         return z

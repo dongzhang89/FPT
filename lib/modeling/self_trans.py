@@ -1,107 +1,86 @@
+import numpy as np
 import torch
-from torch import nn
+import torch.nn as nn
 from torch.nn import functional as F
+BatchNorm2d = nn.BatchNorm2d
 
 class SelfTrans(nn.Module):
-    def __init__(self, in_channels, inter_channels=None, mode='dot', dimension=2, bn_layer=True):
-    # def __init__(self, in_channels, inter_channels=None, mode='dot', dimension=2, bn_layer=True, n_mix, d_k):
+    def __init__(self, n_head, n_mix, d_model, d_k, d_v, 
+        norm_layer=BatchNorm2d, kq_transform='conv', value_transform='conv',
+        pooling=True, concat=False, dropout=0.1):
         super(SelfTrans, self).__init__()
-        assert dimension in [1, 2, 3]
-        if mode not in ['gaussian', 'embedded', 'dot', 'concatenate']:
-            raise ValueError('`mode` must be one of `gaussian`, `embedded`, `dot` or `concatenate`') 
-        self.mode = mode
-        self.dimension = dimension
-        self.in_channels = in_channels
-        self.inter_channels = inter_channels
-        # the channel size is reduced to half inside the block
-        if self.inter_channels is None:
-            self.inter_channels = in_channels // 2
-        if dimension == 3:
-            conv_nd = nn.Conv3d
-            max_pool_layer = nn.MaxPool3d(kernel_size=(1, 2, 2))
-            bn = nn.BatchNorm3d
-        elif dimension == 2:
-            conv_nd = nn.Conv2d
-            max_pool_layer = nn.MaxPool2d(kernel_size=(2, 2))
-            bn = nn.BatchNorm2d
-        else:
-            conv_nd = nn.Conv1d
-            max_pool_layer = nn.MaxPool1d(kernel_size=(2))
-            bn = nn.BatchNorm1d
-        self.g = conv_nd(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1)
 
-        if bn_layer:
-            self.W_z = nn.Sequential(
-                    conv_nd(in_channels=self.inter_channels, out_channels=self.in_channels, kernel_size=1),
-                    bn(self.in_channels)
-                )
-            nn.init.constant_(self.W_z[1].weight, 0)
-            nn.init.constant_(self.W_z[1].bias, 0)
-        else:
-            self.W_z = conv_nd(in_channels=self.inter_channels, out_channels=self.in_channels, kernel_size=1)
-
-            nn.init.constant_(self.W_z.weight, 0)
-            nn.init.constant_(self.W_z.bias, 0)
-
-        if self.mode == "embedded" or self.mode == "dot" or self.mode == "concatenate":
-            self.theta = conv_nd(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1)
-            self.phi = conv_nd(in_channels=self.in_channels, out_channels=self.inter_channels, kernel_size=1)
+        self.n_head = n_head
+        self.n_mix = n_mix
+        self.d_k = d_k
+        self.d_v = d_v
         
-        if self.mode == "concatenate":
-            self.W_f = nn.Sequential(
-                    nn.Conv2d(in_channels=self.inter_channels * 2, out_channels=1, kernel_size=1),
-                    nn.ReLU()
-                ) 
+        self.pooling = pooling
+        self.concat = concat
+
+        if self.pooling:
+            self.pool = nn.AvgPool2d(3, 2, 1, count_include_pad=False)
+        if kq_transform == 'conv':
+            self.conv_qs = nn.Conv2d(d_model, n_head*d_k, 1)
+            nn.init.normal_(self.conv_qs.weight, mean=0, std=np.sqrt(2.0 / (d_model + d_k)))
+        elif kq_transform == 'ffn':
+            self.conv_qs = nn.Sequential(
+                nn.Conv2d(d_model, n_head*d_k, 3, padding=1, bias=False),
+                norm_layer(n_head*d_k),
+                nn.ReLU(True),
+                nn.Conv2d(n_head*d_k, n_head*d_k, 1),
+            )
+            nn.init.normal_(self.conv_qs[-1].weight, mean=0, std=np.sqrt(1.0 / d_k))
+        elif kq_transform == 'dffn':
+            self.conv_qs = nn.Sequential(
+                nn.Conv2d(d_model, n_head*d_k, 3, padding=4, dilation=4, bias=False),
+                norm_layer(n_head*d_k),
+                nn.ReLU(True),
+                nn.Conv2d(n_head*d_k, n_head*d_k, 1),
+            )
+            nn.init.normal_(self.conv_qs[-1].weight, mean=0, std=np.sqrt(1.0 / d_k))
+        else:
+            raise NotImplemented
+
+        self.conv_ks = self.conv_qs
+        if value_transform == 'conv':
+            self.conv_vs = nn.Conv2d(d_model, n_head*d_v, 1)
+        else:
+            raise NotImplemented
+
+        nn.init.normal_(self.conv_vs.weight, mean=0, std=np.sqrt(2.0 / (d_model + d_v)))
+
+        self.attention = MixtureOfSoftMax(n_mix=n_mix, d_k=d_k)
+
+        self.conv = nn.Conv2d(n_head*d_v, d_model, 1, bias=False)
+        self.norm_layer = norm_layer(d_model)
+
     def forward(self, x):
-        """
-        args
-            x: (N, C, T, H, W) for dimension=3; (N, C, H, W) for dimension 2; (N, C, T) for dimension 1
-        """
-        batch_size = x.size(0)
-        g_x = self.g(x).view(batch_size, self.inter_channels, -1)
-        g_x = g_x.permute(0, 2, 1)
+        residual = x
+        d_k, d_v, n_head = self.d_k, self.d_v, self.n_head
+        b_, c_, h_, w_ = x.size()
+        if self.pooling:
+            qt = self.conv_ks(x).view(b_*n_head, d_k, h_*w_)
+            kt = self.conv_ks(self.pool(x)).view(b_*n_head, d_k, h_*w_//4)
+            vt = self.conv_vs(self.pool(x)).view(b_*n_head, d_v, h_*w_//4)
+        else:
+            kt = self.conv_ks(x).view(b_*n_head, d_k, h_*w_)
+            qt = kt
+            vt = self.conv_vs(x).view(b_*n_head, d_v, h_*w_)
 
-        if self.mode == "gaussian":
-            theta_x = x.view(batch_size, self.in_channels, -1)
-            phi_x = x.view(batch_size, self.in_channels, -1)
-            theta_x = theta_x.permute(0, 2, 1)
-            f = torch.matmul(theta_x, phi_x)
+        output, attn = self.attention(qt, kt, vt)
 
-        elif self.mode == "embedded" or self.mode == "dot":
-            theta_x = self.theta(x).view(batch_size, self.inter_channels, -1)
-            phi_x = self.phi(x).view(batch_size, self.inter_channels, -1)
-            theta_x = theta_x.permute(0, 2, 1)
-            f = torch.matmul(theta_x, phi_x)
+        output = output.transpose(1, 2).contiguous().view(b_, n_head*d_v, h_, w_)
 
-        elif self.mode == "concatenate":
-            theta_x = self.theta(x).view(batch_size, self.inter_channels, -1, 1)
-            phi_x = self.phi(x).view(batch_size, self.inter_channels, 1, -1)
-            
-            h = theta_x.size(2)
-            w = phi_x.size(3)
-            theta_x = theta_x.repeat(1, 1, 1, w)
-            phi_x = phi_x.repeat(1, 1, h, 1)
-            concat = torch.cat([theta_x, phi_x], dim=1)
-            f = self.W_f(concat)
-            f = f.view(f.size(0), f.size(2), f.size(3))
-    
-        if self.mode == "gaussian" or self.mode == "embedded":
-            f_div_C = F.softmax(f, dim=-1)
-            # f_div_C = MixtureOfSoftMax(n_mix=n_mix, d_k=d_k)
-
-        elif self.mode == "dot" or self.mode == "concatenate":
-            N = f.size(-1) 
-            f_div_C = f / N
-        y = torch.matmul(f_div_C, g_x)
-        
-        y = y.permute(0, 2, 1).contiguous()
-        y = y.view(batch_size, self.inter_channels, *x.size()[2:])
-        
-        W_y = self.W_z(y)
-        z = W_y + x
-        return z
+        output = self.conv(output)
+        if self.concat:
+            output = torch.cat((self.norm_layer(output), residual), 1)
+        else:
+            output = self.norm_layer(output) + residual
+        return output
 
 class MixtureOfSoftMax(nn.Module):
+    """"https://arxiv.org/pdf/1711.03953.pdf"""
     def __init__(self, n_mix, d_k, attn_dropout=0.1):
         super(MixtureOfSoftMax, self).__init__()
         self.temperature = np.power(d_k, 0.5)
@@ -124,6 +103,7 @@ class MixtureOfSoftMax(nn.Module):
         if m > 1:
             bar_qt = torch.mean(qt, 2, True)
             pi = self.softmax1(torch.matmul(self.weight, bar_qt)).view(B*m, 1, 1)
+
         q = qt.view(B*m, d, N).transpose(1, 2)
         N2 = kt.size(2)
         kt = kt.view(B*m, d, N2)

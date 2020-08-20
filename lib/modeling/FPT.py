@@ -28,16 +28,18 @@ class FPT(nn.Module):
             def group_norm(num_channels):
                 return nn.GroupNorm(32, num_channels)
             norm = group_norm
-        self.st_p5 = SelfTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
-        self.st_p4 = SelfTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
-        self.st_p3 = SelfTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
-        self.st_p2 = SelfTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.st_p5 = SelfTrans(n_head = 1, n_mix = 2, d_model = feature_dim, d_k= feature_dim, d_v= feature_dim)
+        self.st_p4 = SelfTrans(n_head = 1, n_mix = 2, d_model = feature_dim, d_k= feature_dim, d_v= feature_dim)
+        self.st_p3 = SelfTrans(n_head = 1, n_mix = 2, d_model = feature_dim, d_k= feature_dim, d_v= feature_dim)
+        self.st_p2 = SelfTrans(n_head = 1, n_mix = 2, d_model = feature_dim, d_k= feature_dim, d_v= feature_dim)
+        
         self.gt_p4_p5 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
         self.gt_p3_p4 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
         self.gt_p3_p5 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
         self.gt_p2_p3 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
         self.gt_p2_p4 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
         self.gt_p2_p5 = GroundTrans(in_channels=feature_dim, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        
         self.rt_p5_p4 = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)
         self.rt_p5_p3 = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)
         self.rt_p5_p2 = RenderTrans(channels_high=feature_dim, channels_low=feature_dim, upsample=False)

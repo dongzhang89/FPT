@@ -72,7 +72,7 @@ class fpn(nn.Module):
         self.fpn_level_info = fpn_level_info
         self.P2only = P2only
         self.fpt_rendering = fpt_rendering
-        self.st = SelfTrans(in_channels=cfg.FPN.DIM, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.st = SelfTrans(n_head = 1, n_mix = 4, d_model = cfg.FPN.DIM, d_k= cfg.FPN.DIM, d_v= cfg.FPN.DIM)
         self.rt = RenderTrans(channels_high=cfg.FPN.DIM, channels_low=cfg.FPN.DIM, upsample=False)
         self.dim_out = fpn_dim = cfg.FPN.DIM
         min_level, max_level = get_min_max_levels()
@@ -298,7 +298,7 @@ class ground_lateral_module(nn.Module):
             )
 
         self._init_weights()
-        self.st = SelfTrans(in_channels=cfg.FPN.DIM, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
+        self.st = SelfTrans(n_head = 1, n_mix = 4, d_model = cfg.FPN.DIM, d_k= cfg.FPN.DIM, d_v= cfg.FPN.DIM)
         self.gt = GroundTrans(in_channels=cfg.FPN.DIM, inter_channels=None, mode='dot', dimension=2, bn_layer=True)
     def _init_weights(self):
         if cfg.FPN.USE_GN:

@@ -19,6 +19,8 @@ class RenderTrans(nn.Module):
         else:
             self.conv_reduction = nn.Conv2d(channels_low, channels_high, kernel_size=1, padding=0, bias=False)
             self.bn_reduction = nn.BatchNorm2d(channels_high)
+
+        self.str_conv3x3 = nn.Conv2d(channels_low, channels_high, kernel_size=3, stride=2, padding=1, bias=False)
         self.relu = nn.ReLU(inplace=True)
         self.conv_cat = nn.Conv2d(channels_high*2, channels_high, kernel_size=1, padding=0, bias=False)
 
@@ -35,10 +37,10 @@ class RenderTrans(nn.Module):
         x_att = x_high_mask * x_low_gp
         if self.upsample:
             out = self.relu(
-                self.bn_upsample(self.conv_upsample(x_high)) + x_att)
-                # self.conv_cat(torch.cat([self.bn_upsample(self.conv_upsample(x_high)), x_att], dim=1))
+                self.bn_upsample(self.str_conv3x3(x_low)) + x_att)
+                # self.conv_cat(torch.cat([self.bn_upsample(self.str_conv3x3(x_low)), x_att], dim=1))
         else:
             out = self.relu(
-                self.bn_reduction(self.conv_reduction(x_high)) + x_att)
-                # # self.conv_cat(torch.cat([self.bn_reduction(self.conv_reduction(x_high)), x_att], dim=1))
+                self.bn_reduction(self.str_conv3x3(x_low)) + x_att)
+                # # self.conv_cat(torch.cat([self.bn_reduction(self.str_conv3x3(x_low)), x_att], dim=1))
         return out

@@ -173,11 +173,11 @@ python tools/infer_simple.py --dataset coco --cfg configs/e2e_fptnet_R-50_mask.y
 If our work is useful for your research, please consider citing:
 
 ```
-@inproceedings{zhang2020fpt,
-  author = {Dong Zhang, Hanwang Zhang, Jinhui Tang, Meng Wang, Xiansheng Hua and Qianru Sun},
-  title = {Feature Pyramid Transformer},
-  booktitle = {European Conference on Computer Vision (ECCV)},
-  year = {2020}
+@inproceedings{zhang2020feature,
+  title={Feature pyramid transformer},
+  author={Zhang, Dong and Zhang, Hanwang and Tang, Jinhui and Wang, Meng and Hua, Xiansheng and Sun, Qianru},
+  booktitle={European Conference on Computer Vision (ECCV)},
+  year={2020},
 }
 ```
 

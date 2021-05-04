@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 import math
 
+# for using, the two-layer feature maps need to be concatenated together
 
 class LocalityconstrainedGT(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, groups=1, bias=False):

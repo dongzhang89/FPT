@@ -6,7 +6,8 @@ from core.config import cfg
 from modeling.generate_anchors import generate_anchors
 from modeling.generate_proposals import GenerateProposalsOp
 from modeling.generate_proposal_labels import GenerateProposalLabelsOp
-import modeling.FPN as FPN
+import modeling.FPT_s as FPN
+# import modeling.FPT_a as FPN
 import utils.net as net_utils
 
 

@@ -18,137 +18,137 @@ import nn as mynn
 from modeling.self_trans import SelfTrans
 from modeling.rendering_trans import RenderTrans
 from modeling.grounding_trans import GroundTrans
-
+# "_s" means a simplified version
 # ---------------------------------------------------------------------------- #
 def ResNet50_conv5_body():
-    return fpn(
+    return fpt(
         ResNet.ResNet50_conv5_body, 
         fpn_level_info_ResNet50_conv5()
     )
 
 def ResNet50_conv5_body_fpt():
-    return fpn(
+    return fpt(
         ResNet.ResNet50_conv5_body, 
         fpn_level_info_ResNet50_conv5(),
         fpt_rendering=True
     )
 
 def ResNet50_conv5_P2only_body():
-    return fpn(
+    return fpt(
         ResNet.ResNet50_conv5_body,
         fpn_level_info_ResNet50_conv5(),
         P2only=True
     )
 
 def ResNet101_conv5_body():
-    return fpn(
+    return fpt(
         ResNet.ResNet101_conv5_body, 
         fpn_level_info_ResNet101_conv5()
     )
 
 def ResNet101_conv5_P2only_body():
-    return fpn(
+    return fpt(
         ResNet.ResNet101_conv5_body, 
         fpn_level_info_ResNet101_conv5(),
         P2only=True
     )
 
 def ResNet152_conv5_body():
-    return fpn(
+    return fpt(
         ResNet.ResNet152_conv5_body, 
         fpn_level_info_ResNet152_conv5()
     )
 
 def ResNet152_conv5_P2only_body():
-    return fpn(
+    return fpt(
         ResNet.ResNet152_conv5_body,
         fpn_level_info_ResNet152_conv5(),
         P2only=True
     )
 # ---------------------------------------------------------------------------- #
-class fpn(nn.Module):
-    def __init__(self, conv_body_func, fpn_level_info, P2only=False, fpt_rendering=False):
+class fpt(nn.Module):
+    def __init__(self, conv_body_func, fpt_level_info, P2only=False, fpt_rendering=False):
         super().__init__()
-        self.fpn_level_info = fpn_level_info
+        self.fpt_level_info = fpt_level_info
         self.P2only = P2only
         self.fpt_rendering = fpt_rendering
         self.st = SelfTrans(n_head = 1, n_mix = 4, d_model = cfg.FPN.DIM, d_k= cfg.FPN.DIM, d_v= cfg.FPN.DIM)
         self.rt = RenderTrans(channels_high=cfg.FPN.DIM, channels_low=cfg.FPN.DIM, upsample=False)
-        self.dim_out = fpn_dim = cfg.FPN.DIM
+        self.dim_out = fpt_dim = cfg.FPN.DIM
         min_level, max_level = get_min_max_levels()
-        self.num_backbone_stages = len(fpn_level_info.blobs) - (min_level - 2)
-        fpn_dim_lateral = fpn_level_info.dims
+        self.num_backbone_stages = len(fpt_level_info.blobs) - (min_level - 2)
+        fpt_dim_lateral = fpt_level_info.dims
         self.spatial_scale = []
 
-        self.conv_top = nn.Conv2d(fpn_dim_lateral[0], fpn_dim, 1, 1, 0)
+        self.conv_top = nn.Conv2d(fpt_dim_lateral[0], fpt_dim, 1, 1, 0)
         if cfg.FPN.USE_GN:
             self.conv_top = nn.Sequential(
-                nn.Conv2d(fpn_dim_lateral[0], fpn_dim, 1, 1, 0, bias=False),
-                nn.GroupNorm(net_utils.get_group_gn(fpn_dim), fpn_dim, eps=cfg.GROUP_NORM.EPSILON))
+                nn.Conv2d(fpt_dim_lateral[0], fpn_dim, 1, 1, 0, bias=False),
+                nn.GroupNorm(net_utils.get_group_gn(fpt_dim), fpn_dim, eps=cfg.GROUP_NORM.EPSILON))
         else:
-            self.conv_top = nn.Conv2d(fpn_dim_lateral[0], fpn_dim, 1, 1, 0)
+            self.conv_top = nn.Conv2d(fpt_dim_lateral[0], fpn_dim, 1, 1, 0)
 
         self.ground_lateral_modules = nn.ModuleList()
         self.posthoc_modules = nn.ModuleList()
 
         for i in range(self.num_backbone_stages - 1):
             self.ground_lateral_modules.append(
-                ground_lateral_module(fpn_dim, fpn_dim_lateral[i+1])
+                ground_lateral_module(fpt_dim, fpn_dim_lateral[i+1])
             )
 
         for i in range(self.num_backbone_stages):
-            if cfg.FPN.USE_GN:
+            if cfg.fpt.USE_GN:
                 self.posthoc_modules.append(nn.Sequential(
-                    nn.Conv2d(fpn_dim, fpn_dim, 3, 1, 1, bias=False),
-                    nn.GroupNorm(net_utils.get_group_gn(fpn_dim), fpn_dim,
+                    nn.Conv2d(fpt_dim, fpt_dim, 3, 1, 1, bias=False),
+                    nn.GroupNorm(net_utils.get_group_gn(fpt_dim), fpt_dim,
                                  eps=cfg.GROUP_NORM.EPSILON),
-                    nn.Conv2d(fpn_dim, fpn_dim, 3, 1, 1, bias=False),
+                    nn.Conv2d(fpt_dim, fpt_dim, 3, 1, 1, bias=False),
                     nn.ReLU(inplace=True)
                 ))
             else:
                 self.posthoc_modules.append(
-                    nn.Conv2d(fpn_dim, fpn_dim, 3, 1, 1, bias=False),
-                    nn.Conv2d(fpn_dim, fpn_dim, 3, 1, 1, bias=False),
+                    nn.Conv2d(fpt_dim, fpt_dim, 3, 1, 1, bias=False),
+                    nn.Conv2d(fpt_dim, fpt_dim, 3, 1, 1, bias=False),
                     nn.ReLU(inplace=True)
                 )
 
-            self.spatial_scale.append(fpn_level_info.spatial_scales[i])
+            self.spatial_scale.append(fpt_level_info.spatial_scales[i])
 
         if self.fpt_rendering:
             self.fpt_rendering_conv1_modules = nn.ModuleList()
             self.fpt_rendering_conv2_modules = nn.ModuleList()
 
             for i in range(self.num_backbone_stages - 1):
-                if cfg.FPN.USE_GN:
+                if cfg.fpt.USE_GN:
                     self.fpt_rendering_conv1_modules.append(nn.Sequential(
-                        nn.Conv2d(fpn_dim, fpn_dim, 3, 2, 1, bias=True),
-                        nn.GroupNorm(net_utils.get_group_gn(fpn_dim), fpn_dim,
+                        nn.Conv2d(fpt_dim, fpt_dim, 3, 2, 1, bias=True),
+                        nn.GroupNorm(net_utils.get_group_gn(fpt_dim), fpt_dim,
                                     eps=cfg.GROUP_NORM.EPSILON), nn.ReLU(inplace=True)
                     ))
                     self.fpt_rendering_conv2_modules.append(nn.Sequential(
-                        nn.Conv2d(fpn_dim, fpn_dim, 3, 1, 1, bias=True),
-                        nn.GroupNorm(net_utils.get_group_gn(fpn_dim), fpn_dim, eps=cfg.GROUP_NORM.EPSILON),
+                        nn.Conv2d(fpt_dim, fpt_dim, 3, 1, 1, bias=True),
+                        nn.GroupNorm(net_utils.get_group_gn(fpt_dim), fpt_dim, eps=cfg.GROUP_NORM.EPSILON),
                         nn.ReLU(inplace=True)
                     ))
                 else:
                     self.fpt_rendering_conv1_modules.append(
-                        nn.Conv2d(fpn_dim, fpn_dim, 3, 2, 1)
+                        nn.Conv2d(fpt_dim, fpt_dim, 3, 2, 1)
                     )
                     self.fpt_rendering_conv2_modules.append(
-                        nn.Conv2d(fpn_dim, fpn_dim, 3, 1, 1))
+                        nn.Conv2d(fpt_dim, fpt_dim, 3, 1, 1))
  
-        if not cfg.FPN.EXTRA_CONV_LEVELS and max_level == 6:
+        if not cfg.fpt.EXTRA_CONV_LEVELS and max_level == 6:
             self.maxpool_p6 = nn.MaxPool2d(kernel_size=1, stride=2, padding=0)
             self.spatial_scale.insert(0, self.spatial_scale[0] * 0.5)
 
         if cfg.FPN.EXTRA_CONV_LEVELS and max_level > 5:
             self.extra_pyramid_modules = nn.ModuleList()
-            dim_in = fpn_level_info.dims[0]
+            dim_in = fpt_level_info.dims[0]
             for i in range(6, max_level + 1):
                 self.extra_pyramid_modules(
-                    nn.Conv2d(dim_in, fpn_dim, 3, 2, 1)
+                    nn.Conv2d(dim_in, fpt_dim, 3, 2, 1)
                 )
-                dim_in = fpn_dim
+                dim_in = fpt_dim
                 self.spatial_scale.insert(0, self.spatial_scale[0] * 0.5)
 
         if self.P2only:
@@ -176,8 +176,8 @@ class fpn(nn.Module):
         for key, value in conv_body_mapping.items():
             mapping_to_detectron['conv_body.'+key] = value
 
-        d_prefix = 'fpn_inner_' + self.fpn_level_info.blobs[0]
-        if cfg.FPN.USE_GN:
+        d_prefix = 'fpt_inner_' + self.fpt_level_info.blobs[0]
+        if cfg.fpt.USE_GN:
             mapping_to_detectron['conv_top.0.weight'] = d_prefix + '_w'
             mapping_to_detectron['conv_top.1.weight'] = d_prefix + '_gn_s'
             mapping_to_detectron['conv_top.1.bias'] = d_prefix + '_gn_b'
@@ -186,7 +186,7 @@ class fpn(nn.Module):
             mapping_to_detectron['conv_top.bias'] = d_prefix + '_b'
         for i in range(self.num_backbone_stages - 1):
             p_prefix = 'ground_lateral_modules.%d.conv_lateral' % i
-            d_prefix = 'fpn_inner_' + self.fpn_level_info.blobs[i+1] + '_lateral'
+            d_prefix = 'fpt_inner_' + self.fpt_level_info.blobs[i+1] + '_lateral'
             if cfg.FPN.USE_GN:
                 mapping_to_detectron.update({
                     p_prefix + '.0.weight' : d_prefix + '_w',
@@ -201,7 +201,7 @@ class fpn(nn.Module):
 
         for i in range(self.num_backbone_stages):
             p_prefix = 'posthoc_modules.%d' % i
-            d_prefix = 'fpn_' + self.fpn_level_info.blobs[i]
+            d_prefix = 'fpt_' + self.fpt_level_info.blobs[i]
             if cfg.FPN.USE_GN:
                 mapping_to_detectron.update({
                     p_prefix + '.0.weight': d_prefix + '_w',
@@ -217,7 +217,7 @@ class fpn(nn.Module):
         if hasattr(self, 'extra_pyramid_modules'):
             for i in len(self.extra_pyramid_modules):
                 p_prefix = 'extra_pyramid_modules.%d' % i
-                d_prefix = 'fpn_%d' % (6 + i)
+                d_prefix = 'fpt_%d' % (6 + i)
                 mapping_to_detectron.update({
                     p_prefix + '.weight': d_prefix + '_w',
                     p_prefix + '.bias': d_prefix + '_b'
@@ -231,50 +231,50 @@ class fpn(nn.Module):
             conv_body_blobs.append(
                 getattr(self.conv_body, 'res%d' % (i+1))(conv_body_blobs[-1])
             )
-        fpn_inner_blobs = [self.st(self.conv_top(conv_body_blobs[-1]))]
+        fpt_inner_blobs = [self.st(self.conv_top(conv_body_blobs[-1]))]
 
         for i in range(self.num_backbone_stages - 1):
-            fpn_inner_blobs.append(
-                self.ground_lateral_modules[i](fpn_inner_blobs[-1], conv_body_blobs[-(i+2)])
+            fpt_inner_blobs.append(
+                self.ground_lateral_modules[i](fpt_inner_blobs[-1], conv_body_blobs[-(i+2)])
             )
-        fpn_output_blobs = []
+        fpt_output_blobs = []
 
         if self.fpt_rendering:
-            fpn_middle_blobs = []
+            fpt_middle_blobs = []
 
         for i in range(self.num_backbone_stages):
             if not self.fpt_rendering:
-                fpn_output_blobs.append(
-                    self.posthoc_modules[i](fpn_inner_blobs[i])
+                fpt_output_blobs.append(
+                    self.posthoc_modules[i](fpt_inner_blobs[i])
                 )
             else:
-                fpn_middle_blobs.append(
+                fpt_middle_blobs.append(
                     self.posthoc_modules[i](fpn_inner_blobs[i])
                 )
 
         if self.fpt_rendering:
-            fpn_output_blobs.append(fpn_middle_blobs[-1])
+            fpt_output_blobs.append(fpt_middle_blobs[-1])
             for i in range(2, self.num_backbone_stages + 1):
-                rend_tmp = self.fpt_rendering_conv1_modules[i - 2](fpn_output_blobs[0])
-                print(fpn_middle_blobs[self.num_backbone_stages - i].size())
-                rend_tmp = rend_tmp + fpn_middle_blobs[self.num_backbone_stages - i]
-                # rend_tmp = self.rt(fpn_middle_blobs[self.num_backbone_stages - i], rend_tmp)
+                rend_tmp = self.fpt_rendering_conv1_modules[i - 2](fpt_output_blobs[0])
+                print(fpt_middle_blobs[self.num_backbone_stages - i].size())
+                rend_tmp = rend_tmp + fpt_middle_blobs[self.num_backbone_stages - i]
+                # rend_tmp = self.rt(fpt_middle_blobs[self.num_backbone_stages - i], rend_tmp)
                 rend_tmp = self.fpt_rendering_conv2_modules[i - 2](rend_tmp)
-                fpn_output_blobs.insert(0, rend_tmp)        
+                fpt_output_blobs.insert(0, rend_tmp)        
 
         if hasattr(self, 'maxpool_p6'):
-            fpn_output_blobs.insert(0, self.maxpool_p6(fpn_output_blobs[0]))
+            fpt_output_blobs.insert(0, self.maxpool_p6(fpt_output_blobs[0]))
 
         if hasattr(self, 'extra_pyramid_modules'):
             blob_in = conv_body_blobs[-1]
-            fpn_output_blobs.insert(0, self.extra_pyramid_modules(blob_in))
+            fpt_output_blobs.insert(0, self.extra_pyramid_modules(blob_in))
             for module in self.extra_pyramid_modules[1:]:
-                fpn_output_blobs.insert(0, module(F.relu(fpn_output_blobs[0], inplace=True)))
+                fpt_output_blobs.insert(0, module(F.relu(fpt_output_blobs[0], inplace=True)))
 
         if self.P2only:
-            return fpn_output_blobs[-1]
+            return fpt_output_blobs[-1]
         else:
-            return fpn_output_blobs
+            return fpt_output_blobs
 
 class ground_lateral_module(nn.Module):
     def __init__(self, dim_in_top, dim_in_lateral):
@@ -336,7 +336,7 @@ def get_min_max_levels():
 
 # ---------------------------------------------------------------------------- #
 class fpn_rpn_outputs(nn.Module):
-    """Add RPN on FPN specific outputs."""
+    """Add RPN on fpt specific outputs."""
     def __init__(self, dim_in, spatial_scales):
         super().__init__()
         self.dim_in = dim_in
@@ -398,11 +398,11 @@ class fpn_rpn_outputs(nn.Module):
             slvl = str(lvl)
             bl_in = blobs_in[k_max - lvl]  # blobs_in is in reversed order
 
-            fpn_rpn_conv = F.relu(self.FPN_RPN_conv(bl_in), inplace=True)
-            fpn_rpn_cls_score = self.FPN_RPN_cls_score(fpn_rpn_conv)
-            fpn_rpn_bbox_pred = self.FPN_RPN_bbox_pred(fpn_rpn_conv)
-            return_dict['rpn_cls_logits_fpn' + slvl] = fpn_rpn_cls_score
-            return_dict['rpn_bbox_pred_fpn' + slvl] = fpn_rpn_bbox_pred
+            fpt_rpn_conv = F.relu(self.fpt_RPN_conv(bl_in), inplace=True)
+            fpt_rpn_cls_score = self.fpt_RPN_cls_score(fpt_rpn_conv)
+            fpt_rpn_bbox_pred = self.fpt_RPN_bbox_pred(fpt_rpn_conv)
+            return_dict['rpn_cls_logits_fpt' + slvl] = fpt_rpn_cls_score
+            return_dict['rpn_bbox_pred_fpt' + slvl] = fpt_rpn_bbox_pred
 
             if not self.training or cfg.MODEL.FASTER_RCNN:
                 # Proposals are needed during:
@@ -411,19 +411,19 @@ class fpn_rpn_outputs(nn.Module):
                 #  2) training for Faster R-CNN
                 # Otherwise (== training for RPN only), proposals are not needed
                 if cfg.RPN.CLS_ACTIVATION == 'softmax':
-                    B, C, H, W = fpn_rpn_cls_score.size()
-                    fpn_rpn_cls_probs = F.softmax(
-                        fpn_rpn_cls_score.view(B, 2, C // 2, H, W), dim=1)
-                    fpn_rpn_cls_probs = fpn_rpn_cls_probs[:, 1].squeeze(dim=1)
+                    B, C, H, W = fpt_rpn_cls_score.size()
+                    fpt_rpn_cls_probs = F.softmax(
+                        fpt_rpn_cls_score.view(B, 2, C // 2, H, W), dim=1)
+                    fpt_rpn_cls_probs = fpt_rpn_cls_probs[:, 1].squeeze(dim=1)
                 else:  # sigmoid
-                    fpn_rpn_cls_probs = F.sigmoid(fpn_rpn_cls_score)
+                    fpt_rpn_cls_probs = F.sigmoid(fpt_rpn_cls_score)
 
-                fpn_rpn_rois, fpn_rpn_roi_probs = self.GenerateProposals_modules[lvl - k_min](
-                    fpn_rpn_cls_probs, fpn_rpn_bbox_pred, im_info)
-                rois_blobs.append(fpn_rpn_rois)
-                score_blobs.append(fpn_rpn_roi_probs)
-                return_dict['rpn_rois_fpn' + slvl] = fpn_rpn_rois
-                return_dict['rpn_rois_prob_fpn' + slvl] = fpn_rpn_roi_probs
+                fpt_rpn_rois, fpt_rpn_roi_probs = self.GenerateProposals_modules[lvl - k_min](
+                    fpt_rpn_cls_probs, fpt_rpn_bbox_pred, im_info)
+                rois_blobs.append(fpt_rpn_rois)
+                score_blobs.append(fpt_rpn_roi_probs)
+                return_dict['rpn_rois_fpt' + slvl] = fpt_rpn_rois
+                return_dict['rpn_rois_prob_fpt' + slvl] = fpt_rpn_roi_probs
 
         if cfg.MODEL.FASTER_RCNN:
             # CollectAndDistributeFpnRpnProposals also labels proposals when in training mode
